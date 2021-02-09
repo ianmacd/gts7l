@@ -2523,18 +2523,18 @@ static void sec_bat_swelling_check(struct sec_battery_info *battery)
 				__func__, battery->voltage_now);
 			battery->charging_mode = SEC_BATTERY_CHARGING_1ST;
 			en_rechg = true;
-			/* change drop float voltage */
-			val.intval = battery->pdata->swelling_drop_float_voltage;
-			psy_do_property(battery->pdata->charger_name, set,
-					POWER_SUPPLY_PROP_VOLTAGE_MAX, val);
-			/* set charging enable */
-			sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING);
 			if (temperature > swelling_high_recovery) {
 				pr_info("%s: swelling mode reduce charging current(HIGH-temp:%d)\n",
 					__func__, temperature);
 				sec_bat_set_current_event(battery, SEC_BAT_CURRENT_EVENT_HIGH_TEMP_SWELLING,
 							  SEC_BAT_CURRENT_EVENT_SWELLING_MODE);
 			}
+			/* change drop float voltage */
+			val.intval = battery->pdata->swelling_drop_float_voltage;
+			psy_do_property(battery->pdata->charger_name, set,
+					POWER_SUPPLY_PROP_VOLTAGE_MAX, val);
+			/* set charging enable */
+			sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING);
 		}
 	}
 
@@ -2567,14 +2567,15 @@ static bool sec_bat_set_aging_step(struct sec_battery_info *battery, int step)
 		battery->pdata->age_data[battery->pdata->age_step].float_voltage;
 	battery->pdata->swelling_normal_float_voltage =
 		battery->pdata->chg_float_voltage;
-#if defined(CONFIG_STEP_CHARGING)
-	if (!battery->swelling_mode && (battery->step_charging_status < 0)) {
-#else
+
 	if (!battery->swelling_mode) {
-#endif
-		value.intval = battery->pdata->chg_float_voltage;
-		psy_do_property(battery->pdata->charger_name, set,
+		psy_do_property(battery->pdata->charger_name, get,
 			POWER_SUPPLY_PROP_VOLTAGE_MAX, value);
+		if (value.intval > battery->pdata->chg_float_voltage) {
+			value.intval = battery->pdata->chg_float_voltage;
+			psy_do_property(battery->pdata->charger_name, set,
+				POWER_SUPPLY_PROP_VOLTAGE_MAX, value);
+		}
 	}
 
 	/* full/recharge condition */
@@ -3024,18 +3025,6 @@ static bool sec_bat_temperature_check(
 				}
 			} else {
 				union power_supply_propval val = {0, };
-				/* restore 4.4V float voltage */
-				val.intval = battery->pdata->swelling_normal_float_voltage;
-				psy_do_property(battery->pdata->charger_name, set,
-						POWER_SUPPLY_PROP_VOLTAGE_MAX, val);
-				/* turn on charger by cable type */
-				if((battery->status == POWER_SUPPLY_STATUS_FULL) &&
-					(battery->charging_mode == SEC_BATTERY_CHARGING_NONE)) {
-					sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING_OFF);
-				} else {
-					sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING);
-				}
-
 				if (pre_health == POWER_SUPPLY_HEALTH_COLD) {
 					if (temperature <= battery->pdata->swelling_low_temp_recov_2nd) {
 						sec_bat_set_current_event(battery, SEC_BAT_CURRENT_EVENT_LOW_TEMP_SWELLING_2ND,
@@ -3056,6 +3045,17 @@ static bool sec_bat_temperature_check(
 						sec_bat_set_current_event(battery, SEC_BAT_CURRENT_EVENT_LOW_TEMP_SWELLING_3RD,
 									SEC_BAT_CURRENT_EVENT_SWELLING_MODE);
 					}
+				}
+				/* restore 4.4V float voltage */
+				val.intval = battery->pdata->swelling_normal_float_voltage;
+				psy_do_property(battery->pdata->charger_name, set,
+						POWER_SUPPLY_PROP_VOLTAGE_MAX, val);
+				/* turn on charger by cable type */
+				if((battery->status == POWER_SUPPLY_STATUS_FULL) &&
+					(battery->charging_mode == SEC_BATTERY_CHARGING_NONE)) {
+					sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING_OFF);
+				} else {
+					sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING);
 				}
 			}
 #else
